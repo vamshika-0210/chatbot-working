@@ -28,6 +28,8 @@ let currentBooking = {
     ticketType: null,
     timeSlot: null,
     amount: 0,
+    adultPrice: 0,
+    childPrice: 0,
     email: null
 };
 
@@ -344,7 +346,7 @@ async function showVisitorInputs() {
         const pricing = await response.json();
         
         // Add pricing information as a bot message with ₹ symbol
-        addMessage(`Ticket Prices:\nAdults: ₹${pricing.adult_price} per person\nChildren: ₹${pricing.child_price} per person`, 'bot');
+        addMessage(`Ticket Prices:\nAdult: ₹${pricing.adult_price}\nChild: ₹${pricing.child_price}\nTotal amount: ₹${pricing.adult_price + pricing.child_price}`, 'bot');
     } catch (error) {
         console.error('Error fetching pricing:', error);
     }
@@ -387,10 +389,12 @@ async function submitVisitors() {
         const pricing = await response.json();
         
         // Calculate total amount
+        currentBooking.adultPrice = pricing.adult_price;
+        currentBooking.childPrice = pricing.child_price;
         currentBooking.amount = (currentBooking.adults * pricing.adult_price) + (currentBooking.children * pricing.child_price);
         
-        // Show total amount in chat
-        addMessage(`Total amount: ₹${currentBooking.amount}`, 'bot');
+        // Show basic pricing info
+        addMessage(`Ticket Prices:\nAdult: ₹${pricing.adult_price}\nChild: ₹${pricing.child_price}\nTotal amount: ₹${currentBooking.amount}`, 'bot');
     } catch (error) {
         console.error('Error calculating total:', error);
     }
@@ -503,12 +507,14 @@ function updateBookingSummary() {
         bookingDate.textContent = `Date: ${currentBooking.date}`;
         bookingVisitors.textContent = 
             `Visitors: ${currentBooking.adults} adults, ${currentBooking.children} children`;
-        // Format the amount to ensure it's a number and has proper decimals
-        const formattedAmount = parseFloat(currentBooking.amount).toFixed(2);
+        // Calculate total using stored prices
+        const total = (currentBooking.adults * currentBooking.adultPrice) + 
+                     (currentBooking.children * currentBooking.childPrice);
+        const formattedAmount = parseFloat(total).toFixed(2);
         bookingAmount.textContent = `Total: ₹${formattedAmount}`;
         
         bookingDetails.classList.remove('d-none');
-        if (currentBooking.amount > 0) {
+        if (total > 0) {
             paymentSection.classList.remove('d-none');
         }
     }
