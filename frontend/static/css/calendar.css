@@ -11,6 +11,16 @@
     padding: 10px;
 }
 
+.calendar td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+    height: 80px;
+    width: 80px;
+    vertical-align: top;
+    position: relative;
+}
+
 .calendar-day {
     padding: 10px;
     text-align: center;
@@ -48,6 +58,33 @@
     background-color: #e9ecef;
     border-color: #dee2e6;
     cursor: not-allowed;
+}
+
+.date-number {
+    font-size: 1.1em;
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.slots {
+    font-size: 0.85em;
+    color: #666;
+}
+
+.calendar-day.available .slots {
+    color: #28a745;
+}
+
+.calendar-day.limited .slots {
+    color: #ffc107;
+}
+
+.calendar-day.full .slots {
+    color: #dc3545;
+}
+
+.calendar-day.disabled .slots {
+    color: #6c757d;
 }
 
 .month-selector {

@@ -217,7 +217,7 @@ function createCalendarGrid(year, month) {
                 const currentDate = new Date(year, month, day);
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 
-                let classes = [];
+                let classes = ['calendar-day'];
                 
                 // Check if date is in the past
                 if (currentDate < today) {
@@ -228,7 +228,10 @@ function createCalendarGrid(year, month) {
                     classes.push('future');
                 }
                 
-                html += `<td class="${classes.join(' ')}" data-date="${dateStr}">${day}</td>`;
+                html += `<td class="${classes.join(' ')}" data-date="${dateStr}">
+                    <div class="date-number">${day}</div>
+                    <div class="slots">Loading...</div>
+                </td>`;
                 day++;
             }
         }
@@ -841,6 +844,11 @@ async function fetchCalendarData(year, month) {
         renderCalendar(data);
     } catch (error) {
         console.error('Error fetching calendar data:', error);
+        // Update all slots to show error
+        document.querySelectorAll('.slots').forEach(slot => {
+            slot.textContent = 'Error loading';
+            slot.parentElement.classList.add('unavailable');
+        });
         addMessage('Sorry, there was an error loading the calendar.', 'bot error');
     }
 }
@@ -848,100 +856,45 @@ async function fetchCalendarData(year, month) {
 // Render calendar
 function renderCalendar(data) {
     const calendar = document.getElementById('calendar');
-    const grid = calendar.querySelector('.calendar-grid');
+    if (!calendar) return;
     
-    if (!grid) return;
-    
-    // Clear existing availability classes
-    grid.querySelectorAll('.calendar-day').forEach(cell => {
-        cell.classList.remove('available', 'limited', 'full', 'unavailable');
-    });
-    
-    // Add availability status
+    // Process each date in the calendar
     Object.entries(data).forEach(([date, info]) => {
-        const day = new Date(date).getDate();
-        const dayCell = grid.querySelector(`.calendar-day[data-day="${day}"]`);
-        if (dayCell) {
-            dayCell.classList.add(info.status);
-            
+        const [year, month, day] = date.split('-');
+        const cell = calendar.querySelector(`td[data-date="${date}"]`);
+        
+        if (cell) {
             // Calculate total available slots
             const totalAvailable = info.slots.reduce((sum, slot) => sum + slot.available, 0);
+            const slotsDiv = cell.querySelector('.slots');
             
-            // Update the slots display
-            const slotsDiv = dayCell.querySelector('.slots');
+            // Remove existing availability classes
+            cell.classList.remove('available', 'limited', 'full', 'unavailable');
+            
+            // Update slot information and styling
             if (slotsDiv) {
                 if (info.status === 'unavailable') {
                     slotsDiv.textContent = 'No slots';
-                } else if (info.status === 'full') {
+                    cell.classList.add('unavailable');
+                } else if (totalAvailable === 0) {
                     slotsDiv.textContent = 'Full';
+                    cell.classList.add('full');
+                } else if (totalAvailable < 5) {
+                    slotsDiv.textContent = `${totalAvailable} slots left`;
+                    cell.classList.add('limited');
                 } else {
                     slotsDiv.textContent = `${totalAvailable} slots`;
+                    cell.classList.add('available');
                 }
             }
             
-            // Keep the tooltip for detailed slot information
-            const slotsInfo = info.slots.map(slot => 
-                `${slot.time}: ${slot.available} available`
-            ).join('\n');
-            dayCell.title = slotsInfo || 'No slots available';
+            // Add tooltip with detailed slot information
+            const tooltipContent = info.slots
+                .map(slot => `${slot.time}: ${slot.available} available`)
+                .join('\n');
+            cell.title = tooltipContent || 'No slots available';
         }
     });
-}
-
-// Add hover functionality to show remaining slots
-async function handleDateHover(event, date) {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/bookings?date=${date}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            credentials: 'include',
-            mode: 'cors'
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.slots || !Array.isArray(data.slots)) {
-            throw new Error('Invalid response format');
-        }
-        
-        // Create tooltip content
-        const tooltipContent = data.slots.map(slot => 
-            `${slot.time}: ${slot.available} available (${slot.ticket_type})`
-        ).join('\n');
-        
-        // Update the tooltip
-        event.target.title = tooltipContent || 'No slots available';
-        
-        // Update slot count display
-        const slotsDiv = event.target.querySelector('.slots');
-        if (slotsDiv) {
-            const totalAvailable = data.slots.reduce((sum, slot) => sum + slot.available, 0);
-            if (totalAvailable === 0) {
-                slotsDiv.textContent = 'Full';
-                event.target.classList.remove('available', 'limited');
-                event.target.classList.add('full');
-            } else if (totalAvailable < 5) {
-                slotsDiv.textContent = `${totalAvailable} slots`;
-                event.target.classList.remove('available', 'full');
-                event.target.classList.add('limited');
-            } else {
-                slotsDiv.textContent = `${totalAvailable} slots`;
-                event.target.classList.remove('limited', 'full');
-                event.target.classList.add('available');
-            }
-        }
-    } catch (error) {
-        console.error('Error fetching slot information:', error);
-        event.target.title = 'Error loading slot information';
-    }
 }
 
 function showError(message) {

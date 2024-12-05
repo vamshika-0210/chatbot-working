@@ -635,6 +635,35 @@ def get_calendar_data(year, month):
         while current_date <= last_day:
             day_slots = [s for s in slots if s.date == current_date]
             
+            # If no slots exist for this date and it's not in the past, create default slots
+            today = datetime.now().date()
+            if not day_slots and current_date >= today:
+                try:
+                    # Create morning slot
+                    morning_slot = TimeSlot(
+                        date=current_date,
+                        slot_time='10:00 AM',
+                        capacity=50,
+                        ticket_type='Regular',
+                        booked_count=0
+                    )
+                    # Create afternoon slot
+                    afternoon_slot = TimeSlot(
+                        date=current_date,
+                        slot_time='2:00 PM',
+                        capacity=50,
+                        ticket_type='Regular',
+                        booked_count=0
+                    )
+                    db.session.add(morning_slot)
+                    db.session.add(afternoon_slot)
+                    db.session.commit()
+                    day_slots = [morning_slot, afternoon_slot]
+                    print(f"Created default slots for {current_date}")
+                except Exception as e:
+                    print(f"Error creating slots for {current_date}: {str(e)}")
+                    db.session.rollback()
+            
             # Calculate availability
             if day_slots:
                 total_capacity = sum(slot.capacity for slot in day_slots)
