@@ -324,16 +324,41 @@ function selectNationality(nationality) {
     showTicketTypes();
 }
 
-function showVisitorInputs() {
+async function fetchPricing() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/pricing?nationality=${currentBooking.nationality}&ticketType=${currentBooking.ticketType}&date=${currentBooking.date}`);
+        if (!response.ok) throw new Error('Failed to fetch pricing');
+        const pricing = await response.json();
+        return pricing;
+    } catch (error) {
+        console.error('Error fetching pricing:', error);
+        return null;
+    }
+}
+
+async function showVisitorInputs() {
+    // First fetch the pricing information
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/pricing?nationality=${currentBooking.nationality}&ticketType=${currentBooking.ticketType}&date=${currentBooking.date}`);
+        if (!response.ok) throw new Error('Failed to fetch pricing');
+        const pricing = await response.json();
+        
+        // Add pricing information as a bot message with ₹ symbol
+        addMessage(`Ticket Prices:\nAdults: ₹${pricing.adult_price} per person\nChildren: ₹${pricing.child_price} per person`, 'bot');
+    } catch (error) {
+        console.error('Error fetching pricing:', error);
+    }
+
+    // Show the input fields
     const inputs = document.createElement('div');
     inputs.className = 'visitor-inputs';
     inputs.innerHTML = `
         <div class="mb-3">
-            <label>Adults:</label>
+            <label>Number of Adults:</label>
             <input type="number" min="1" value="1" class="form-control" id="adults-input">
         </div>
         <div class="mb-3">
-            <label>Children:</label>
+            <label>Number of Children:</label>
             <input type="number" min="0" value="0" class="form-control" id="children-input">
         </div>
         <button class="btn btn-primary" onclick="submitVisitors()">Continue</button>
@@ -343,7 +368,7 @@ function showVisitorInputs() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-function submitVisitors() {
+async function submitVisitors() {
     const adults = document.getElementById('adults-input').value;
     const children = document.getElementById('children-input').value;
     
@@ -354,6 +379,21 @@ function submitVisitors() {
     
     currentBooking.adults = parseInt(adults);
     currentBooking.children = parseInt(children);
+    
+    try {
+        // Fetch current pricing
+        const response = await fetch(`${BACKEND_URL}/api/pricing?nationality=${currentBooking.nationality}&ticketType=${currentBooking.ticketType}&date=${currentBooking.date}`);
+        if (!response.ok) throw new Error('Failed to fetch pricing');
+        const pricing = await response.json();
+        
+        // Calculate total amount
+        currentBooking.amount = (currentBooking.adults * pricing.adult_price) + (currentBooking.children * pricing.child_price);
+        
+        // Show total amount in chat
+        addMessage(`Total amount: ₹${currentBooking.amount}`, 'bot');
+    } catch (error) {
+        console.error('Error calculating total:', error);
+    }
     
     // Remove the visitor inputs
     const visitorInputs = document.querySelector('.visitor-inputs');
@@ -423,7 +463,7 @@ function showTimeSlots() {
 }
 
 function selectTimeSlot(timeSlot) {
-    currentBooking.timeSlot = timeSlot;  // No need for time conversion anymore
+    currentBooking.timeSlot = timeSlot;
     
     // Remove time slot options
     const quickReplies = document.querySelector('.quick-replies');
@@ -463,7 +503,9 @@ function updateBookingSummary() {
         bookingDate.textContent = `Date: ${currentBooking.date}`;
         bookingVisitors.textContent = 
             `Visitors: ${currentBooking.adults} adults, ${currentBooking.children} children`;
-        bookingAmount.textContent = `Total: $${currentBooking.amount}`;
+        // Format the amount to ensure it's a number and has proper decimals
+        const formattedAmount = parseFloat(currentBooking.amount).toFixed(2);
+        bookingAmount.textContent = `Total: ₹${formattedAmount}`;
         
         bookingDetails.classList.remove('d-none');
         if (currentBooking.amount > 0) {
@@ -739,7 +781,7 @@ function displayBooking(booking) {
 
     const amountDiv = document.createElement('div');
     amountDiv.className = 'booking-amount';
-    amountDiv.textContent = `$${booking.total_amount.toFixed(2)}`;
+    amountDiv.textContent = `₹${booking.total_amount.toFixed(2)}`;
     infoDiv.appendChild(amountDiv);
 
     resultDiv.appendChild(infoDiv);

@@ -510,6 +510,42 @@ def get_bookings_by_date():
         print(f"Error getting bookings for date: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+# Pricing endpoint
+@app.route('/api/pricing', methods=['GET'])
+def get_pricing():
+    try:
+        nationality = request.args.get('nationality')
+        ticket_type = request.args.get('ticketType')
+        date_str = request.args.get('date')
+        
+        if not all([nationality, ticket_type, date_str]):
+            return jsonify({'error': 'Missing required parameters'}), 400
+            
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format'}), 400
+            
+        pricing = Pricing.query.filter_by(
+            nationality=nationality,
+            ticket_type=ticket_type
+        ).filter(
+            Pricing.effective_from <= date_obj,
+            Pricing.effective_to >= date_obj
+        ).first()
+        
+        if not pricing:
+            return jsonify({'error': 'No pricing found for the selected options'}), 404
+            
+        return jsonify({
+            'adult_price': pricing.adult_price,
+            'child_price': pricing.child_price
+        })
+        
+    except Exception as e:
+        print(f"Error in get_pricing: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 # Payment endpoints
 @app.route('/api/payments/initialize', methods=['POST'])
 def initialize_payment():
