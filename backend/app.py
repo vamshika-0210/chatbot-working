@@ -325,41 +325,41 @@ def create_booking():
             traceback.print_exc()
             return jsonify({'error': 'Error managing time slot'}), 500
         
-        # Create the booking with confirmed status
-        booking = Booking(
-            date=booking_date,
-            email=data['email'],
-            nationality=data['nationality'],
-            adults=adults,
-            children=children,
-            ticket_type=data['ticketType'],
-            time_slot=data['timeSlot'],
-            total_amount=float(total_amount),
-            status='confirmed',  
-            payment_status='confirmed'  
-        )
+        # Create the booking with pending status
+        try:
+            booking = Booking(
+                date=booking_date,
+                email=data['email'],
+                nationality=data['nationality'],
+                adults=adults,
+                children=children,
+                ticket_type=data['ticketType'],
+                time_slot=data['timeSlot'],
+                total_amount=float(total_amount),
+                status='pending',
+                payment_status='pending'
+            )
             
-        # Update the time slot's booked count
-        time_slot.booked_count += total_visitors
+            # Update the time slot's booked count
+            time_slot.booked_count += total_visitors
             
-        db.session.add(booking)
-        db.session.commit()
-        print(f"Successfully created booking with ID: {booking.booking_id}")
-        print(f"Updated time slot booked count to: {time_slot.booked_count}")
+            db.session.add(booking)
+            db.session.commit()
+            print(f"Successfully created booking with ID: {booking.booking_id}")
+            print(f"Updated time slot booked count to: {time_slot.booked_count}")
             
-        return jsonify({
-            'success': True,
-            'booking': {
-                'id': booking.booking_id,
-                'date': booking.date.strftime('%Y-%m-%d'),
-                'time_slot': booking.time_slot,
-                'adults': booking.adults,
-                'children': booking.children,
-                'amount': float(booking.total_amount),
-                'email': booking.email,
-                'status': booking.status
-            }
-        }), 201
+            return jsonify({
+                'success': True,
+                'booking_id': booking.booking_id,
+                'amount': total_amount
+            })
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error saving booking: {str(e)}")
+            print(f"Full error traceback:")
+            traceback.print_exc()
+            return jsonify({'error': 'Failed to save booking. Please try again.'}), 500
             
     except Exception as e:
         print(f"Unexpected error in create_booking: {str(e)}")

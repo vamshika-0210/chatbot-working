@@ -548,17 +548,48 @@ async function createBooking(bookingData) {
         }
 
         const data = await response.json();
-        return {
-            success: true,
-            booking: {
-                id: data.booking_id,
-                date: bookingData.date,
-                adults: bookingData.adults,
-                children: bookingData.children,
-                amount: bookingData.amount,
-                email: bookingData.email
+        
+        // Initialize payment after booking creation
+        if (data.success && data.booking_id) {
+            const paymentResponse = await fetch(`${GATEWAY_URL}/api/payments/initialize`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                credentials: 'include',
+                mode: 'cors',
+                body: JSON.stringify({
+                    booking_id: data.booking_id,
+                    amount: bookingData.amount,
+                    payment_method: 'card'
+                })
+            });
+
+            if (!paymentResponse.ok) {
+                const paymentError = await paymentResponse.json();
+                throw new Error(paymentError.message || 'Failed to process payment');
             }
-        };
+
+            const paymentData = await paymentResponse.json();
+            if (paymentData.success) {
+                return {
+                    success: true,
+                    booking: {
+                        id: data.booking_id,
+                        date: bookingData.date,
+                        adults: bookingData.adults,
+                        children: bookingData.children,
+                        amount: bookingData.amount,
+                        email: bookingData.email,
+                        payment_status: 'completed',
+                        status: 'confirmed'
+                    }
+                };
+            }
+        }
+
+        throw new Error('Payment initialization failed');
     } catch (error) {
         console.error('Booking creation error:', error);
         return {
@@ -632,11 +663,11 @@ async function showBookingStatus() {
             
             const data = await response.json();
             
-            if (!data.status === 'success') {
-                throw new Error(data.message || 'Failed to fetch booking');
+            if (!data.slots || !Array.isArray(data.slots)) {
+                throw new Error('Invalid response format');
             }
             
-            displayBooking(data.data);
+            displayBooking(data);
         } catch (error) {
             console.error('Error fetching booking:', error);
             addMessage('Sorry, we couldn\'t find a booking with that ID. Please check and try again.', 'bot');
