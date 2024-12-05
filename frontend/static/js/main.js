@@ -658,16 +658,25 @@ async function showBookingStatus() {
             
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
             
             const data = await response.json();
             
-            if (!data.slots || !Array.isArray(data.slots)) {
-                throw new Error('Invalid response format');
+            if (data.status === 'success' && data.data) {
+                displayBooking({
+                    id: data.data.id,
+                    date: data.data.date,
+                    time_slot: data.data.time_slot,
+                    adult_count: data.data.adult_count,
+                    child_count: data.data.child_count,
+                    total_amount: data.data.total_amount,
+                    status: data.data.status,
+                    payment_status: data.data.payment_status
+                });
+            } else {
+                throw new Error(data.message || 'Invalid response format');
             }
-            
-            displayBooking(data);
         } catch (error) {
             console.error('Error fetching booking:', error);
             addMessage('Sorry, we couldn\'t find a booking with that ID. Please check and try again.', 'bot');
@@ -696,10 +705,17 @@ function displayBooking(booking) {
     const resultDiv = document.createElement('div');
     resultDiv.className = 'booking-result';
 
+    // Status tag for booking status
     const statusDiv = document.createElement('div');
     statusDiv.className = `booking-status-tag ${booking.status.toLowerCase()}`;
     statusDiv.textContent = booking.status;
     resultDiv.appendChild(statusDiv);
+
+    // Status tag for payment status
+    const paymentStatusDiv = document.createElement('div');
+    paymentStatusDiv.className = `booking-status-tag payment-${booking.payment_status.toLowerCase()}`;
+    paymentStatusDiv.textContent = `Payment: ${booking.payment_status}`;
+    resultDiv.appendChild(paymentStatusDiv);
 
     const infoDiv = document.createElement('div');
     infoDiv.className = 'booking-info';
@@ -711,19 +727,23 @@ function displayBooking(booking) {
 
     const visitorsDiv = document.createElement('div');
     visitorsDiv.className = 'booking-visitors';
-    visitorsDiv.textContent = `${booking.adult_count + booking.child_count} Visitors`;
+    const totalVisitors = booking.adult_count + booking.child_count;
+    const visitorText = [];
+    if (booking.adult_count > 0) visitorText.push(`${booking.adult_count} Adult${booking.adult_count > 1 ? 's' : ''}`);
+    if (booking.child_count > 0) visitorText.push(`${booking.child_count} Child${booking.child_count > 1 ? 'ren' : ''}`);
+    visitorsDiv.textContent = visitorText.join(', ');
     infoDiv.appendChild(visitorsDiv);
 
     const amountDiv = document.createElement('div');
     amountDiv.className = 'booking-amount';
-    amountDiv.textContent = `$${booking.total_amount}`;
+    amountDiv.textContent = `$${booking.total_amount.toFixed(2)}`;
     infoDiv.appendChild(amountDiv);
 
     resultDiv.appendChild(infoDiv);
 
     const referenceDiv = document.createElement('div');
     referenceDiv.className = 'booking-reference';
-    referenceDiv.textContent = `Reference: ${booking.id.slice(0, 8)}`;
+    referenceDiv.textContent = `Reference: ${booking.id}`;
     resultDiv.appendChild(referenceDiv);
 
     // Create message container
@@ -750,7 +770,7 @@ function displayBooking(booking) {
                 border-radius: 12px;
                 font-size: 0.9em;
                 font-weight: 500;
-                margin-bottom: 12px;
+                margin: 0 8px 12px 0;
             }
             .booking-status-tag.confirmed {
                 background: #e3f2fd;
@@ -761,6 +781,18 @@ function displayBooking(booking) {
                 color: #f57c00;
             }
             .booking-status-tag.cancelled {
+                background: #ffebee;
+                color: #d32f2f;
+            }
+            .booking-status-tag.payment-pending {
+                background: #fff3e0;
+                color: #f57c00;
+            }
+            .booking-status-tag.payment-completed {
+                background: #e8f5e9;
+                color: #2e7d32;
+            }
+            .booking-status-tag.payment-failed {
                 background: #ffebee;
                 color: #d32f2f;
             }
