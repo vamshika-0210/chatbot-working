@@ -346,7 +346,7 @@ async function showVisitorInputs() {
         const pricing = await response.json();
         
         // Add pricing information as a bot message with ₹ symbol
-        addMessage(`Ticket Prices:\nAdult: ₹${pricing.adult_price}\nChild: ₹${pricing.child_price}\nTotal amount: ₹${pricing.adult_price + pricing.child_price}`, 'bot');
+        addMessage(`Ticket Prices:\nAdult: ₹${pricing.adult_price}\nChild: ₹${pricing.child_price}`, 'bot');
     } catch (error) {
         console.error('Error fetching pricing:', error);
     }
@@ -392,9 +392,6 @@ async function submitVisitors() {
         currentBooking.adultPrice = pricing.adult_price;
         currentBooking.childPrice = pricing.child_price;
         currentBooking.amount = (currentBooking.adults * pricing.adult_price) + (currentBooking.children * pricing.child_price);
-        
-        // Show basic pricing info
-        addMessage(`Ticket Prices:\nAdult: ₹${pricing.adult_price}\nChild: ₹${pricing.child_price}\nTotal amount: ₹${currentBooking.amount}`, 'bot');
     } catch (error) {
         console.error('Error calculating total:', error);
     }
@@ -407,7 +404,10 @@ async function submitVisitors() {
     
     addMessage(`Selected visitors: ${adults} adults, ${children} children`, 'user');
     addMessage('Please enter your email address for booking confirmation:', 'bot');
-    
+    showEmailInput();
+}
+
+function showEmailInput() {
     const emailInput = document.createElement('div');
     emailInput.className = 'email-input-container';
     emailInput.innerHTML = `
@@ -416,6 +416,31 @@ async function submitVisitors() {
     `;
     messagesContainer.appendChild(emailInput);
     document.getElementById('visitor-email').focus();
+}
+
+function submitEmail() {
+    const emailInput = document.getElementById('visitor-email');
+    const email = emailInput.value.trim();
+    
+    if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        addMessage('Please enter a valid email address.', 'bot');
+        return;
+    }
+    
+    currentBooking.email = email;
+    addMessage(`Email: ${email}`, 'user');
+    
+    // Remove email input
+    const emailContainer = document.querySelector('.email-input-container');
+    if (emailContainer) {
+        emailContainer.remove();
+    }
+    
+    // Show booking summary and payment options
+    addMessage('Great! Here\'s your booking summary:', 'bot');
+    updateBookingSummary();
+    addMessage('Please review your booking details and proceed to payment.', 'bot');
+    paymentSection.classList.remove('d-none');
 }
 
 function showTicketTypes() {
@@ -450,7 +475,7 @@ function selectTicketType(ticketType) {
 }
 
 function showTimeSlots() {
-    const timeSlots = ['10:00 AM', '2:00 PM'];  // Updated to match backend
+    const timeSlots = ['10:00 AM', '2:00 PM'];
     const quickReplies = document.createElement('div');
     quickReplies.className = 'quick-replies';
     
@@ -467,57 +492,15 @@ function showTimeSlots() {
 }
 
 function selectTimeSlot(timeSlot) {
-    currentBooking.timeSlot = timeSlot;
-    
-    // Remove time slot options
     const quickReplies = document.querySelector('.quick-replies');
     if (quickReplies) {
         quickReplies.remove();
     }
     
+    currentBooking.timeSlot = timeSlot;
     addMessage(`Selected time slot: ${timeSlot}`, 'user');
     addMessage('Please enter the number of visitors:', 'bot');
     showVisitorInputs();
-}
-
-function submitEmail() {
-    const emailInput = document.getElementById('visitor-email');
-    const email = emailInput.value.trim();
-    
-    if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-        addMessage('Please enter a valid email address.', 'bot');
-        return;
-    }
-    
-    currentBooking.email = email;
-    addMessage(`Email: ${email}`, 'user');
-    emailInput.parentElement.remove();
-    
-    // Show booking summary and payment options
-    currentBooking.amount = (currentBooking.adults * 20) + (currentBooking.children * 10);
-    
-    addMessage('Great! Here\'s your booking summary:', 'bot');
-    updateBookingSummary();
-    addMessage('Great! Please review your booking details and proceed to payment.', 'bot');
-    paymentSection.classList.remove('d-none');
-}
-
-function updateBookingSummary() {
-    if (currentBooking.date) {
-        bookingDate.textContent = `Date: ${currentBooking.date}`;
-        bookingVisitors.textContent = 
-            `Visitors: ${currentBooking.adults} adults, ${currentBooking.children} children`;
-        // Calculate total using stored prices
-        const total = (currentBooking.adults * currentBooking.adultPrice) + 
-                     (currentBooking.children * currentBooking.childPrice);
-        const formattedAmount = parseFloat(total).toFixed(2);
-        bookingAmount.textContent = `Total: ₹${formattedAmount}`;
-        
-        bookingDetails.classList.remove('d-none');
-        if (total > 0) {
-            paymentSection.classList.remove('d-none');
-        }
-    }
 }
 
 // Payment handling
@@ -533,6 +516,9 @@ proceedPaymentBtn.addEventListener('click', async () => {
         if (missingFields.length > 0) {
             throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
         }
+
+        // Log the email before sending
+        console.log('Email being sent:', currentBooking.email);
 
         const bookingData = {
             date: currentBooking.date,
@@ -553,9 +539,6 @@ proceedPaymentBtn.addEventListener('click', async () => {
             
             // Display the confirmed booking details
             displayConfirmedBooking(response.booking);
-            
-            // Show success message
-            addMessage(`Booking confirmed! Your booking ID is: ${response.booking.id}. A confirmation email has been sent to ${response.booking.email}`, 'bot');
             
             // Clear current booking
             currentBooking = {
@@ -580,76 +563,6 @@ proceedPaymentBtn.addEventListener('click', async () => {
     }
 });
 
-async function createBooking(bookingData) {
-    try {
-        const response = await fetch(`${GATEWAY_URL}/api/bookings/create`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            credentials: 'include',
-            mode: 'cors',
-            body: JSON.stringify(bookingData)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to create booking');
-        }
-
-        const data = await response.json();
-        
-        // Initialize payment after booking creation
-        if (data.success && data.booking_id) {
-            const paymentResponse = await fetch(`${GATEWAY_URL}/api/payments/initialize`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                credentials: 'include',
-                mode: 'cors',
-                body: JSON.stringify({
-                    booking_id: data.booking_id,
-                    amount: bookingData.amount,
-                    payment_method: 'card'
-                })
-            });
-
-            if (!paymentResponse.ok) {
-                const paymentError = await paymentResponse.json();
-                throw new Error(paymentError.message || 'Failed to process payment');
-            }
-
-            const paymentData = await paymentResponse.json();
-            if (paymentData.success) {
-                return {
-                    success: true,
-                    booking: {
-                        id: data.booking_id,
-                        date: bookingData.date,
-                        adults: bookingData.adults,
-                        children: bookingData.children,
-                        amount: bookingData.amount,
-                        email: bookingData.email,
-                        payment_status: 'completed',
-                        status: 'confirmed'
-                    }
-                };
-            }
-        }
-
-        throw new Error('Payment initialization failed');
-    } catch (error) {
-        console.error('Booking creation error:', error);
-        return {
-            success: false,
-            message: error.message || 'Failed to create booking'
-        };
-    }
-}
-
 function displayConfirmedBooking(booking) {
     if (!booking || !booking.id) {
         console.error('Invalid booking data:', booking);
@@ -657,19 +570,39 @@ function displayConfirmedBooking(booking) {
     }
 
     try {
-        // Show confirmed booking details section
-        confirmedBookingDetails.classList.remove('d-none');
-        
-        // Update the confirmed booking details
-        confirmedBookingId.textContent = booking.id;
-        confirmedBookingDate.textContent = new Date(booking.date).toLocaleDateString();
-        confirmedBookingVisitors.textContent = `Adults: ${booking.adults}, Children: ${booking.children}`;
-        confirmedBookingAmount.textContent = `₹${booking.amount}`;
-        
-        // Hide the booking details section
+        // Hide booking details and payment section
         bookingDetails.classList.add('d-none');
+        paymentSection.classList.add('d-none');
+
+        // Show confirmed booking details
+        confirmedBookingDetails.classList.remove('d-none');
+        confirmedBookingId.textContent = booking.id;
+        confirmedBookingDate.textContent = booking.date;
+        confirmedBookingVisitors.textContent = `${booking.adults} Adults, ${booking.children} Children`;
+        confirmedBookingAmount.textContent = `₹${booking.amount}`;
+
+        // Add confirmation message with email
+        addMessage(`Booking confirmed! Your booking ID is: ${booking.id}. A confirmation email has been sent to ${booking.email}`, 'bot');
     } catch (error) {
         console.error('Error displaying confirmed booking:', error);
+    }
+}
+
+function updateBookingSummary() {
+    if (currentBooking.date) {
+        bookingDate.textContent = `Date: ${currentBooking.date}`;
+        bookingVisitors.textContent = 
+            `Visitors: ${currentBooking.adults} adults, ${currentBooking.children} children`;
+        // Calculate total using stored prices
+        const total = (currentBooking.adults * currentBooking.adultPrice) + 
+                     (currentBooking.children * currentBooking.childPrice);
+        const formattedAmount = parseFloat(total).toFixed(2);
+        bookingAmount.textContent = `Total: ₹${formattedAmount}`;
+        
+        bookingDetails.classList.remove('d-none');
+        if (total > 0) {
+            paymentSection.classList.remove('d-none');
+        }
     }
 }
 
@@ -883,10 +816,12 @@ async function fetchCalendarData(year, month) {
             credentials: 'include',
             mode: 'cors'
         });
+        
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Failed to fetch calendar data');
         }
+        
         const data = await response.json();
         console.log('Calendar data received:', data); // Debug log
         renderCalendar(data);
@@ -951,4 +886,80 @@ function showError(message) {
     errorDiv.textContent = message;
     messagesContainer.appendChild(errorDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+async function createBooking(bookingData) {
+    try {
+        // Step 1: Create the booking
+        const bookingResponse = await fetch(`${GATEWAY_URL}/api/bookings/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            credentials: 'include',
+            mode: 'cors',
+            body: JSON.stringify(bookingData)
+        });
+
+        if (!bookingResponse.ok) {
+            const errorData = await bookingResponse.json();
+            throw new Error(errorData.message || 'Failed to create booking');
+        }
+
+        const bookingResult = await bookingResponse.json();
+        
+        // Step 2: Initialize payment only if booking was created successfully
+        if (bookingResult.success && bookingResult.booking_id) {
+            const paymentData = {
+                booking_id: bookingResult.booking_id,
+                amount: bookingResult.amount,
+                payment_method: 'card'  // Default to card payment
+            };
+
+            const paymentResponse = await fetch(`${GATEWAY_URL}/api/payments/initialize`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                credentials: 'include',
+                mode: 'cors',
+                body: JSON.stringify(paymentData)
+            });
+
+            if (!paymentResponse.ok) {
+                const paymentError = await paymentResponse.json();
+                throw new Error(paymentError.error || 'Failed to process payment');
+            }
+
+            const paymentResult = await paymentResponse.json();
+            
+            if (paymentResult.success) {
+                return {
+                    success: true,
+                    booking: {
+                        id: bookingResult.booking_id,
+                        date: bookingResult.date,
+                        adults: bookingResult.adults,
+                        children: bookingResult.children,
+                        amount: bookingResult.amount,
+                        email: bookingData.email, // Use the email from the original booking data
+                        payment_status: 'completed',
+                        status: 'confirmed'
+                    }
+                };
+            } else {
+                throw new Error(paymentResult.error || 'Payment processing failed');
+            }
+        }
+
+        throw new Error('Booking creation failed');
+    } catch (error) {
+        console.error('Booking creation error:', error);
+        return {
+            success: false,
+            message: error.message || 'Failed to create booking'
+        };
+    }
 }

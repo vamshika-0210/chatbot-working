@@ -192,16 +192,16 @@ def get_bookings():
             morning_slot = TimeSlot(
                 date=date_obj,
                 slot_time='10:00 AM',
-                capacity=50,
+                capacity=50,  # Back to 50 slots
                 ticket_type='Regular',
-                booked_count=0  # Explicitly set booked_count
+                booked_count=0
             )
             afternoon_slot = TimeSlot(
                 date=date_obj,
                 slot_time='2:00 PM',
-                capacity=50,
+                capacity=50,  # Back to 50 slots
                 ticket_type='Regular',
-                booked_count=0  # Explicitly set booked_count
+                booked_count=0
             )
             
             try:
@@ -305,7 +305,7 @@ def create_booking():
                 time_slot = TimeSlot(
                     date=booking_date,
                     slot_time=data['timeSlot'],
-                    capacity=50,
+                    capacity=50,  # Each time slot has 50 capacity
                     ticket_type=data['ticketType'],
                     booked_count=0
                 )
@@ -313,12 +313,14 @@ def create_booking():
                 db.session.commit()
                 print("Successfully created new time slot")
                 
-            # Check capacity
+            # Check capacity for this specific time slot
             total_visitors = adults + children
-            if time_slot.booked_count + total_visitors > time_slot.capacity:
-                return jsonify({'error': 'Not enough capacity available'}), 400
-                
-            print(f"Time slot capacity check passed. Current bookings: {time_slot.booked_count}, New visitors: {total_visitors}")
+            current_booked = time_slot.booked_count if time_slot.booked_count is not None else 0
+            
+            if current_booked + total_visitors > time_slot.capacity:
+                return jsonify({'error': f'Not enough capacity available for the {data["timeSlot"]} time slot'}), 400
+                    
+            print(f"Time slot {data['timeSlot']} capacity check passed. Current bookings: {current_booked}, New visitors: {total_visitors}")
         except Exception as e:
             db.session.rollback()
             print(f"Error handling time slot: {str(e)}")
@@ -340,8 +342,8 @@ def create_booking():
                 payment_status='pending'
             )
             
-            # Update the time slot's booked count
-            time_slot.booked_count += total_visitors
+            # Update the time slot's booked count (count each person)
+            time_slot.booked_count = current_booked + total_visitors
             
             db.session.add(booking)
             db.session.commit()
@@ -468,14 +470,14 @@ def get_bookings_by_date():
                 slot_time='10:00 AM',
                 capacity=50,
                 ticket_type='Regular',
-                booked_count=0  # Explicitly set booked_count
+                booked_count=0
             )
             afternoon_slot = TimeSlot(
                 date=date_obj,
                 slot_time='2:00 PM',
                 capacity=50,
                 ticket_type='Regular',
-                booked_count=0  # Explicitly set booked_count
+                booked_count=0
             )
             
             db.session.add(morning_slot)
@@ -598,11 +600,11 @@ def initialize_payment():
                 db.session.rollback()
                 return jsonify({'error': 'Time slot not found'}), 404
                 
-            if time_slot.booked_count + booking.adults + booking.children > time_slot.capacity:
+            if time_slot.booked_count + 1 > time_slot.capacity:
                 db.session.rollback()
                 return jsonify({'error': 'Not enough capacity available'}), 400
                 
-            time_slot.booked_count += booking.adults + booking.children
+            time_slot.booked_count += 1
             
             # Commit the transaction
             db.session.commit()
@@ -702,25 +704,39 @@ def get_calendar_data(year, month):
             
             # Calculate availability
             if day_slots:
-                total_capacity = sum(slot.capacity for slot in day_slots)
-                total_booked = sum(slot.booked_count for slot in day_slots)
-                availability = total_capacity - total_booked
+                total_availability = 0
+                slot_data = []
                 
-                if availability == 0:
+                for slot in day_slots:
+                    slot_availability = slot.capacity - slot.booked_count
+                    status = 'available'
+                    if slot_availability == 0:
+                        status = 'full'
+                    elif slot_availability <= slot.capacity * 0.2:
+                        status = 'limited'
+                    
+                    slot_data.append({
+                        'time': slot.slot_time,
+                        'available': slot_availability,
+                        'capacity': slot.capacity,
+                        'booked': slot.booked_count,
+                        'status': status
+                    })
+                
+                # Overall status is the most restrictive status
+                if any(s['status'] == 'full' for s in slot_data):
                     status = 'full'
-                elif availability <= total_capacity * 0.2:  # Less than 20% available
+                elif any(s['status'] == 'limited' for s in slot_data):
                     status = 'limited'
                 else:
                     status = 'available'
             else:
                 status = 'unavailable'
+                slot_data = []
             
             calendar_data[current_date.strftime('%Y-%m-%d')] = {
                 'status': status,
-                'slots': [{
-                    'time': slot.slot_time,
-                    'available': slot.capacity - slot.booked_count
-                } for slot in day_slots]
+                'slots': slot_data
             }
             current_date += timedelta(days=1)
         
